@@ -517,37 +517,19 @@ def patch_Gemma3Attention():
                 seq_len = attention_mask.shape[-1]
                 key_states, value_states = key_states[:, :, :seq_len, :], value_states[:, :, :seq_len, :]
 
-        # attention_interface: Callable = eager_attention_forward
-        # if self.config._attn_implementation != "eager":
-        #     if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-        #         logger.warning_once(
-        #             "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. "
-        #             "Falling back to eager attention. This warning can be removed using the argument "
-        #             '`attn_implementation="eager"` when loading the model.'
-        #         )
-        #     else:
-        #         attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        # attn_output, attn_weights = attention_interface(
-        #     self,
-        #     query_states.to(downcast_dtype),
-        #     key_states.to(downcast_dtype),
-        #     value_states.to(downcast_dtype),
-        #     attention_mask.to(downcast_dtype),
-        #     dropout=self.attention_dropout if self.training else 0.0,
-        #     scaling=self.scaling,
-        #     sliding_window=self.sliding_window,
-        #     **kwargs,
-        # )
-        attn_output = scaled_dot_product_attention(
+        attn_output, attn_weights = attention_interface(
+            self,
             query_states.to(downcast_dtype),
             key_states.to(downcast_dtype),
             value_states.to(downcast_dtype),
-            attn_mask=attention_mask.to(downcast_dtype),
-            dropout_p=self.attention_dropout if self.training else 0.0,
-            scale=self.scaling,
-            enable_gqa=getattr(self, "num_key_value_groups", 1) != 1,
-        ).transpose(1, 2)
+            attention_mask.to(downcast_dtype),
+            dropout=self.attention_dropout if self.training else 0.0,
+            scaling=self.scaling,
+            sliding_window=self.sliding_window,
+            **kwargs,
+        )
 
         attn_output = attn_output.reshape(*input_shape, -1)#.contiguous()
         attn_output = self.o_proj(attn_output)
